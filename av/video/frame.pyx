@@ -12,6 +12,19 @@ from av.video.plane cimport VideoPlane
 
 cdef object _cinit_bypass_sentinel
 
+# `pix_fmt`s supported by Frame.to_ndarray() and Frame.from_ndarray()
+supported_np_pix_fmts = {
+    "abgr", "argb", "bayer_bggr16be", "bayer_bggr16le", "bayer_bggr8", "bayer_gbrg16be",
+    "bayer_gbrg16le", "bayer_gbrg8", "bayer_grbg16be", "bayer_grbg16le", "bayer_grbg8",
+    "bayer_rggb16be", "bayer_rggb16le", "bayer_rggb8", "bgr24", "bgr8", "bgra",
+    "gbrapf32be", "gbrapf32le", "gbrp", "gbrp10be", "gbrp10le", "gbrp12be", "gbrp12le",
+    "gbrp14be", "gbrp14le", "gbrp16be", "gbrp16le", "gbrpf32be", "gbrpf32le", "gray",
+    "gray16be", "gray16le", "gray8", "grayf32be", "grayf32le", "nv12", "pal8", "rgb24",
+    "rgb48be", "rgb48le", "rgb8", "rgba", "rgba64be", "rgba64le", "yuv420p",
+    "yuv422p10le", "yuv444p", "yuv444p16be", "yuv444p16le", "yuva444p16be",
+    "yuva444p16le", "yuvj420p", "yuvj444p", "yuyv422",
+}
+
 cdef VideoFrame alloc_video_frame():
     """Get a mostly uninitialized VideoFrame.
 
@@ -309,7 +322,7 @@ cdef class VideoFrame(Frame):
         import numpy as np
 
         # check size
-        if frame.format.name in {"yuv420p", "yuvj420p", "yuyv422"}:
+        if frame.format.name in {"yuv420p", "yuvj420p", "yuyv422", "yuv422p10le"}:
             assert frame.width % 2 == 0, "the width has to be even for this pixel format"
             assert frame.height % 2 == 0, "the height has to be even for this pixel format"
 
@@ -317,6 +330,18 @@ cdef class VideoFrame(Frame):
         itemsize, dtype = {
             "abgr": (4, "uint8"),
             "argb": (4, "uint8"),
+            "bayer_bggr8": (1, "uint8"),
+            "bayer_gbrg8": (1, "uint8"),
+            "bayer_grbg8": (1, "uint8"),
+            "bayer_rggb8": (1, "uint8"),
+            "bayer_bggr16le": (2, "uint16"),
+            "bayer_bggr16be": (2, "uint16"),
+            "bayer_gbrg16le": (2, "uint16"),
+            "bayer_gbrg16be": (2, "uint16"),
+            "bayer_grbg16le": (2, "uint16"),
+            "bayer_grbg16be": (2, "uint16"),
+            "bayer_rggb16le": (2, "uint16"),
+            "bayer_rggb16be": (2, "uint16"),
             "bgr24": (3, "uint8"),
             "bgr8": (1, "uint8"),
             "bgra": (4, "uint8"),
@@ -383,6 +408,18 @@ cdef class VideoFrame(Frame):
                 useful_array(frame.planes[1]),
                 useful_array(frame.planes[2]),
             ]).reshape(-1, frame.width)
+        if frame.format.name == "yuv422p10le":
+            # Read planes as uint16 at their original width
+            y = useful_array(frame.planes[0], 2, "uint16").reshape(frame.height, frame.width)
+            u = useful_array(frame.planes[1], 2, "uint16").reshape(frame.height, frame.width // 2)
+            v = useful_array(frame.planes[2], 2, "uint16").reshape(frame.height, frame.width // 2)
+
+            # Double the width of U and V by repeating each value
+            u_full = np.repeat(u, 2, axis=1)
+            v_full = np.repeat(v, 2, axis=1)
+            if channel_last:
+                return np.stack([y, u_full, v_full], axis=2)
+            return np.stack([y, u_full, v_full], axis=0)
         if frame.format.name == "pal8":
             image = useful_array(frame.planes[0]).reshape(frame.height, frame.width)
             palette = np.frombuffer(frame.planes[1], "i4").astype(">i4").reshape(-1, 1).view(np.uint8)
@@ -451,6 +488,13 @@ cdef class VideoFrame(Frame):
             else:
                 # Planes where U and V are interleaved have the same stride as Y.
                 linesizes = (array.strides[0], array.strides[0])
+        elif format in {"bayer_bggr8", "bayer_rggb8", "bayer_gbrg8", "bayer_grbg8","bayer_bggr16le", "bayer_rggb16le", "bayer_gbrg16le", "bayer_grbg16le","bayer_bggr16be", "bayer_rggb16be", "bayer_gbrg16be", "bayer_grbg16be"}:
+            check_ndarray(array, "uint8" if format.endswith("8") else "uint16", 2)
+    
+            if array.strides[1] != (1 if format.endswith("8") else 2):
+                raise ValueError("provided array does not have C_CONTIGUOUS rows")
+    
+            linesizes = (array.strides[0],)
         else:
             raise ValueError(f"Conversion from numpy array with format `{format}` is not yet supported")
 
@@ -554,7 +598,19 @@ cdef class VideoFrame(Frame):
             "yuv444p16be": (3, 2, "uint16"),
             "yuv444p16le": (3, 2, "uint16"),
             "yuva444p16be": (4, 2, "uint16"),
-            "yuva444p16le": (4, 2, "uint16"),
+            "yuva444p16le": (4, 2, "uint16"),            
+            "bayer_bggr8": (1, 1, "uint8"),
+            "bayer_rggb8": (1, 1, "uint8"),
+            "bayer_grbg8": (1, 1, "uint8"),
+            "bayer_gbrg8": (1, 1, "uint8"),
+            "bayer_bggr16be": (1, 2, "uint16"),
+            "bayer_bggr16le": (1, 2, "uint16"),
+            "bayer_rggb16be": (1, 2, "uint16"),
+            "bayer_rggb16le": (1, 2, "uint16"),
+            "bayer_grbg16be": (1, 2, "uint16"),
+            "bayer_grbg16le": (1, 2, "uint16"),
+            "bayer_gbrg16be": (1, 2, "uint16"),
+            "bayer_gbrg16le": (1, 2, "uint16"),
         }.get(format, (None, None, None))
         if channels is not None:
             if array.ndim == 2:  # (height, width) -> (height, width, 1)
@@ -596,6 +652,28 @@ cdef class VideoFrame(Frame):
             copy_array_to_plane(flat[0:u_start], frame.planes[0], 1)
             copy_array_to_plane(flat[u_start:v_start], frame.planes[1], 1)
             copy_array_to_plane(flat[v_start:], frame.planes[2], 1)
+            return frame
+        elif format == "yuv422p10le":
+            if not isinstance(array, np.ndarray) or array.dtype != np.uint16:
+                raise ValueError("Array must be uint16 type")
+
+            # Convert to channel-first if needed
+            if channel_last and array.shape[2] == 3:
+                array = np.moveaxis(array, 2, 0)
+            elif not (array.shape[0] == 3):
+                raise ValueError("Array must have shape (3, height, width) or (height, width, 3)")
+
+            height, width = array.shape[1:]
+            if width % 2 != 0 or height % 2 != 0:
+                raise ValueError("Width and height must be even")
+
+            frame = VideoFrame(width, height, format)
+            copy_array_to_plane(array[0], frame.planes[0], 2)
+            # Subsample U and V by taking every other column
+            u = array[1, :, ::2].copy()  # Need copy to ensure C-contiguous
+            v = array[2, :, ::2].copy()  # Need copy to ensure C-contiguous
+            copy_array_to_plane(u, frame.planes[1], 2)
+            copy_array_to_plane(v, frame.planes[2], 2)
             return frame
         elif format == "yuyv422":
             check_ndarray(array, "uint8", 3)
@@ -644,6 +722,8 @@ cdef class VideoFrame(Frame):
         frame = VideoFrame(width, height, format)
         if format == "rgba":
             copy_bytes_to_plane(img_bytes, frame.planes[0], 4, flip_horizontal, flip_vertical)
+        elif format in ("bayer_bggr8", "bayer_rggb8", "bayer_gbrg8", "bayer_grbg8","bayer_bggr16le", "bayer_rggb16le", "bayer_gbrg16le", "bayer_grbg16le","bayer_bggr16be", "bayer_rggb16be", "bayer_gbrg16be", "bayer_grbg16be"):
+            copy_bytes_to_plane(img_bytes, frame.planes[0], 1 if format.endswith("8") else 2, flip_horizontal, flip_vertical)
         else:
             raise NotImplementedError(f"Format '{format}' is not supported.")
         return frame
