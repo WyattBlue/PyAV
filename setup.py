@@ -239,64 +239,13 @@ for ext in ext_modules:
         insert_enum_in_generated_files(cfile)
 
 
-# Read package metadata
-about = {}
-about_file = os.path.join(os.path.dirname(__file__), "av", "about.py")
-with open(about_file, encoding="utf-8") as fp:
-    exec(fp.read(), about)
-
 package_folders = pathlib.Path("av").glob("**/")
 package_data = {
     ".".join(pckg.parts): ["*.pxd", "*.pyi", "*.typed"] for pckg in package_folders
 }
 
-
-with open("README.md") as f:
-    long_description = f.read()
-
 setup(
-    name="pyav",
-    version=about["__version__"],
-    description="Pythonic bindings for FFmpeg's libraries.",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    license="BSD",
-    project_urls={
-        "Bug Reports": "https://github.com/PyAV-Org/PyAV/discussions/new?category=4-bugs",
-        "Documentation": "https://pyav.basswood-io.com",
-        "Download": "https://pypi.org/project/pyav",
-    },
-    author="WyattBlue",
-    author_email="wyattblue@auto-editor.com",
-    url="https://github.com/WyattBlue/pyav",
-    packages=find_packages(
-        exclude=["build*", "examples*", "tests*", "include*", "AUTHORS*"]
-    ),
+    packages=find_packages(include=["av*"]),
     package_data=package_data,
-    python_requires=">=3.10",
-    zip_safe=False,
     ext_modules=ext_modules,
-    entry_points={
-        "console_scripts": ["pyav = av.__main__:main"],
-    },
-    classifiers=[
-        "Development Status :: 5 - Production/Stable",
-        "Intended Audience :: Developers",
-        "License :: OSI Approved :: BSD License",
-        "Natural Language :: English",
-        "Operating System :: MacOS :: MacOS X",
-        "Operating System :: POSIX",
-        "Operating System :: Unix",
-        "Operating System :: Microsoft :: Windows",
-        "Programming Language :: Cython",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "Programming Language :: Python :: 3.13",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-        "Topic :: Multimedia :: Sound/Audio",
-        "Topic :: Multimedia :: Sound/Audio :: Conversion",
-        "Topic :: Multimedia :: Video",
-        "Topic :: Multimedia :: Video :: Conversion",
-    ],
 )
