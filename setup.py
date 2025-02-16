@@ -6,6 +6,31 @@ import re
 import shlex
 import subprocess
 import sys
+from time import sleep
+
+
+def is_virtualenv():
+    return sys.base_prefix != sys.prefix
+
+
+if platform.system() == "Darwin":
+    major_version = int(platform.mac_ver()[0].split(".")[0])
+    if major_version < 12:
+        print(
+            "\033[1;91mWarning!\033[0m You are using an EOL, unsupported, and out-of-date OS."
+        )
+        sleep(3)
+
+# Don't show message when using our project tooling.
+if not is_virtualenv() or os.getenv("_PYAV_ACTIVATED", "") != "1":
+    print(
+        "\n\033[1;91mWarning!\033[0m You are installing from source.\n"
+        "It is \033[1;37mEXPECTED\033[0m that it will fail. You are \033[1;37mREQUIRED\033[0m"
+        " to use ffmpeg 7.\nYou \033[1;37mMUST\033[0m have Cython, pkg-config, and a C compiler.\n"
+    )
+    if os.getenv("GITHUB_ACTIONS") != "true":
+        sleep(3)
+
 
 from Cython.Build import cythonize
 from Cython.Compiler.AutoDocTransforms import EmbedSignature
@@ -244,7 +269,9 @@ setup(
     author="WyattBlue",
     author_email="wyattblue@auto-editor.com",
     url="https://github.com/WyattBlue/pyav",
-    packages=find_packages(exclude=["build*", "examples*", "tests*", "include*"]),
+    packages=find_packages(
+        exclude=["build*", "examples*", "tests*", "include*", "AUTHORS*"]
+    ),
     package_data=package_data,
     python_requires=">=3.10",
     zip_safe=False,
